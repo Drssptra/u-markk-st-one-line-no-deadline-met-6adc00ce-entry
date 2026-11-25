@@ -1,39 +1,57 @@
-// One Line, No Deadline Met — a single-line excuse for a missed deadline.
+// One Line, No Deadline Met — v2 rewrite.
 //
-// The joke flips the blame: the deadline is the one that ran away.
-// Writes the line to $MAKEFUN_OUTPUT_DIR/entry.txt (default
-// /output/entry.txt) with no trailing newline, and prints it to stdout.
-//
-// One sentence, under the 200-character gate, deterministic on every
-// run. Node 22, standard library only, no network at runtime.
+// Premise: the speaker skipped a deadline deliberately, on the
+// word of a traveller from their own future — the only witness
+// who has already survived the fallout. The joke turns on the
+// last two words: the expert is just "me".
+// This file assembles that one line from its clauses, checks it
+// against the 1–200 character single-line gate, then drops it
+// into entry.txt with no trailing newline.
 
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
-const ENTRY =
-  "I didn't miss the deadline — it took one look at my to-do list, panicked, and fled before I could disappoint it.";
+// Clauses of the excuse, in order. Joined with single spaces;
+// the em dash and the final "me." carry the punchline.
+const CLAUSES: readonly string[] = [
+  "My future self warned me",
+  "the deadline wasn't worth meeting,",
+  "so I listened to the only expert",
+  "who'd already lived through it — me.",
+];
 
-// The sealed gate allows 1-200 characters, a single line, not only
-// whitespace. Keep the cap as a named constant so it is easy to audit.
-const GATE_MAX_CHARS = 200;
+const GATE = { min: 1, max: 200 } as const;
 
-function checkEntry(text: string): void {
-  if (text.length === 0 || text.length > GATE_MAX_CHARS) {
-    throw new Error(
-      `entry must be 1-${GATE_MAX_CHARS} characters, got ${text.length}`,
-    );
+class OneLineEntry {
+  readonly line: string;
+
+  constructor(clauses: readonly string[]) {
+    this.line = clauses.join(" ");
+    this.assertInGate();
   }
-  if (text.trim().length === 0 || text.includes("\n") || text.includes("\r")) {
-    throw new Error("entry must be a single non-blank line");
+
+  private assertInGate(): void {
+    const { line } = this;
+    if (line.length < GATE.min || line.length > GATE.max) {
+      throw new RangeError(
+        `entry is ${line.length} chars, gate is ${GATE.min}-${GATE.max}`,
+      );
+    }
+    if (/[\r\n]/.test(line) || line.trim() !== line || line.length === 0) {
+      throw new RangeError("entry must be one non-blank line");
+    }
+  }
+
+  save(directory: string): string {
+    const target = path.resolve(directory, "entry.txt");
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, Buffer.from(this.line, "utf8"));
+    return target;
   }
 }
 
-function main(): void {
-  checkEntry(ENTRY);
-  const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
-  mkdirSync(outDir, { recursive: true });
-  writeFileSync(join(outDir, "entry.txt"), ENTRY, "utf8");
-  console.log(ENTRY);
-}
-
-main();
+const entry = new OneLineEntry(CLAUSES);
+const outputDir = process.env["MAKEFUN_OUTPUT_DIR"] ?? "/output";
+const writtenTo = entry.save(outputDir);
+process.stdout.write(`${entry.line}\n`);
+process.stderr.write(`wrote ${entry.line.length} chars to ${writtenTo}\n`);
